@@ -4,7 +4,7 @@ A dynamic layered music player for Dead by Daylight and Forsaken terror radius t
 Paste four audio URLs (L1 → L2 → L3 → Chase) and drag the proximity slider to hear how
 the mix changes as the killer gets closer.
 
-> **Live demo →** *(add Vercel/GitHub Pages URL here after deploying)*
+> **[Live demo](https://terror-radius.vercel.app/)**
 
 ---
 
