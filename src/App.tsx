@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, startTransition } from 'react';
 import { Play, Square, Volume2, VolumeX, Link as LinkIcon, AlertCircle, PanelLeft, PanelRight, X, Maximize2, HelpCircle } from 'lucide-react';
+import { SpeedInsights } from "@vercel/speed-insights/react"
 
 // ============================================================
 // TYPES
@@ -1871,6 +1872,7 @@ export default function App() {
           ))}
         </div>
       </div>
+      <SpeedInsights />
     </div>
   );
 }
