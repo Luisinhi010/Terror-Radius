@@ -13,6 +13,7 @@
     "tauri:android:build": "tauri android build"
   },
   "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "@vercel/speed-insights": "^2.0.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
