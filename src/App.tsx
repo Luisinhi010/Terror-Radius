@@ -6,7 +6,7 @@
 // Constantes em src/constants.ts
 // ============================================================
 
-import React, {
+import {
   useState, useEffect, useMemo, useCallback,
   useRef, startTransition,
 } from 'react';
