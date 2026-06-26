@@ -26,7 +26,7 @@ the mix changes as the killer gets closer.
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/terrorradius.git
+git clone https://github.com/Luisinhi010/Terror-Radius.git
 cd terrorradius
 npm install
 
