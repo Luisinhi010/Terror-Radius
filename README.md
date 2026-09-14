@@ -14,7 +14,7 @@ the mix changes as the killer gets closer.
 - **Crossfade curves** — Linear or Equal-Power
 - **Per-layer waveform visualisers** and a combined frequency spectrum
 - **Volume curve graph** — SVG chart of all 4 layer volumes across the 0–100% range
-- **Presets sidebar** — 3 built-in presets (CURTAINS_CALL, Nil.Incident, The Singularity) + save/load favourites
+- **Presets sidebar** — 3 built-in presets (CURTAINS_CALL, No Virus, The Singularity) + save/load favourites
 - **Export / Import** — full JSON config including saved presets
 - **Proximity vignette**, smooth approach animation, keyboard shortcuts
 - **Tauri desktop app** — compact floating bar mode, always-on-top, Android APK build
@@ -81,7 +81,7 @@ The `dist/` folder is a plain static site. It works on any static host.
 
 ## Tech stack
 
-- [React 18](https://react.dev/) + TypeScript
+- [React 19](https://react.dev/) + TypeScript
 - [Vite](https://vitejs.dev/)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [Tauri v2](https://tauri.app/) — desktop & Android packaging
