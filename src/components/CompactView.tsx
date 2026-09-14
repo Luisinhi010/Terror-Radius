@@ -35,7 +35,6 @@ export function CompactView({
     >
       <button onClick={onExpand} title="Expand  (Ctrl+M)"
         className="text-neutral-600 hover:text-neutral-300 transition-colors flex-shrink-0 pointer-events-auto"
-        data-tauri-drag-region=""
       >
         <Maximize2 size={13} />
       </button>
