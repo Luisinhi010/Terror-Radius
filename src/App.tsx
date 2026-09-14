@@ -106,7 +106,7 @@ export default function App() {
   const {
     isPlaying, errors, loadingLayers, analysers,
     volL1, volL2, volL3, volChase,
-    togglePlay,
+    play, stop, togglePlay,
   } = useAudioEngine({
     closeness, mixMode, audioUrls, masterVolume,
     isMuted, crossfadeMode, layerOverrides,
@@ -116,7 +116,13 @@ export default function App() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
       if (e.code === 'KeyM' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
@@ -188,13 +194,13 @@ export default function App() {
   // ── Media Session ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.setActionHandler('play',  () => togglePlay());
-    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+    navigator.mediaSession.setActionHandler('play',  () => { void play(); });
+    navigator.mediaSession.setActionHandler('pause', () => stop());
     return () => {
       navigator.mediaSession.setActionHandler('play',  null);
       navigator.mediaSession.setActionHandler('pause', null);
     };
-  }, [togglePlay]);
+  }, [play, stop]);
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
@@ -250,13 +256,13 @@ export default function App() {
   const exportStateRef = useRef({
     mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop, smoothApproach,
     vignetteEnabled, showWaveforms, showSpectrum, showCurveGraph,
-    audioUrls, activePreset, userFavorites,
+    audioUrls, activePreset, userFavorites, masterVolume, alwaysOnTop,
   });
   useEffect(() => {
     exportStateRef.current = {
       mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop, smoothApproach,
       vignetteEnabled, showWaveforms, showSpectrum, showCurveGraph,
-      audioUrls, activePreset, userFavorites,
+      audioUrls, activePreset, userFavorites, masterVolume, alwaysOnTop,
     };
   });
 
@@ -273,6 +279,8 @@ export default function App() {
       showWaveforms:  s.showWaveforms,
       showSpectrum:   s.showSpectrum,
       showCurveGraph: s.showCurveGraph,
+      masterVolume:   s.masterVolume,
+      alwaysOnTop:    s.alwaysOnTop,
       activePreset:   s.activePreset?.name ?? null,
       savedPresets:   s.userFavorites,
       dbd_boundaries: {
@@ -301,6 +309,9 @@ export default function App() {
       if (typeof c.showWaveforms   === 'boolean') setShowWaveforms(c.showWaveforms);
       if (typeof c.showSpectrum    === 'boolean') setShowSpectrum(c.showSpectrum);
       if (typeof c.showCurveGraph  === 'boolean') setShowCurveGraph(c.showCurveGraph);
+      if (typeof c.masterVolume === 'number' && Number.isFinite(c.masterVolume))
+        setMasterVolume(Math.min(1, Math.max(0, c.masterVolume)));
+      if (typeof c.alwaysOnTop === 'boolean') setAlwaysOnTop(c.alwaysOnTop);
       if (c.urls && typeof c.urls === 'object') {
         const ls: AudioLayer[] = ['l1','l2','l3','chase'];
         if (ls.every(l => typeof c.urls[l] === 'string')) setAudioUrls(c.urls as AudioUrls);
@@ -312,9 +323,11 @@ export default function App() {
           typeof (p as Preset).id   === 'string' &&
           typeof (p as Preset).name === 'string' &&
           typeof (p as Preset).urls === 'object' &&
-          ls.every(l => typeof (p as Preset).urls[l] === 'string')
+          ls.every(l => typeof (p as Preset).urls[l] === 'string') &&
+          ((p as Preset).defaultMixMode === undefined ||
+            ['dbd', 'forsaken'].includes((p as Preset).defaultMixMode as string))
         );
-        if (valid.length > 0) setUserFavorites(valid);
+        setUserFavorites(valid);
       }
       return true;
     } catch { return false; }
@@ -322,7 +335,7 @@ export default function App() {
     setMixMode, setCrossfadeMode, setForsakenSpeed,
     setSmoothPlayStop, setSmoothApproach,
     setVignetteEnabled, setShowWaveforms, setShowSpectrum, setShowCurveGraph,
-    setAudioUrls, setUserFavorites,
+    setMasterVolume, setAlwaysOnTop, setAudioUrls, setUserFavorites,
   ]);
 
   const resetSettings = useCallback(() => {
