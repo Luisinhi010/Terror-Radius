@@ -24,6 +24,8 @@ import {
 import { getZone } from './utils/audioMath';
 import { usePersistedState } from './hooks/usePersistedState';
 import { useAudioEngine }    from './hooks/useAudioEngine';
+import { useLocalAudioSources } from './hooks/useLocalAudioSources';
+import { isLocalAudioUrl, portableAudioUrls, portablePresets, readAudioUrls } from './utils/localAudio';
 
 import { LayerCard }       from './components/LayerCard';
 import { MasterVisualizer } from './components/MasterVisualizer';
@@ -47,8 +49,8 @@ export default function App() {
   const [mixMode,         setMixMode]         = usePersistedState<MixMode>('tr_mixMode',      'dbd');
   const [masterVolume,    setMasterVolume]     = usePersistedState<number>('tr_masterVolume',  1);
   const [crossfadeMode,   setCrossfadeMode]    = usePersistedState<CrossfadeMode>('tr_xfade',  'linear');
-  const [audioUrls,       setAudioUrls]        = usePersistedState<AudioUrls>('tr_audioUrls',  EMPTY_URLS);
-  const [userFavorites,   setUserFavorites]    = usePersistedState<Preset[]>('tr_favorites',   []);
+  const [audioUrls,       setAudioUrls]        = usePersistedState<AudioUrls>('tr_audioUrls', EMPTY_URLS, portableAudioUrls);
+  const [userFavorites,   setUserFavorites]    = usePersistedState<Preset[]>('tr_favorites', [], portablePresets);
   const [vignetteEnabled, setVignetteEnabled]  = usePersistedState<boolean>('tr_vignette',     true);
   const [alwaysOnTop,     setAlwaysOnTop]      = usePersistedState<boolean>('tr_aot',          false);
   const [showCurveGraph,  setShowCurveGraph]   = usePersistedState<boolean>('tr_curve',        true);
@@ -104,7 +106,7 @@ export default function App() {
 
   // ── Audio engine ──────────────────────────────────────────────────────────
   const {
-    isPlaying, errors, loadingLayers, analysers,
+    isPlaying, errors, loadingLayers, analysers, playbackError,
     volL1, volL2, volL3, volChase,
     play, stop, togglePlay,
   } = useAudioEngine({
@@ -235,8 +237,10 @@ export default function App() {
 
   // ── Helpers: URL change ───────────────────────────────────────────────────
   const handleUrlChange = useCallback((layer: AudioLayer, value: string) => {
-    setAudioUrls(prev => ({ ...prev, [layer]: value }));
+    setAudioUrls(prev => prev[layer] === value ? prev : ({ ...prev, [layer]: value }));
   }, [setAudioUrls]);
+
+  const { files: localFiles, selectFile } = useLocalAudioSources(audioUrls, userFavorites, handleUrlChange);
 
   // ── Helpers: mute / solo ──────────────────────────────────────────────────
   const toggleMute = useCallback((layer: AudioLayer) => {
@@ -282,7 +286,8 @@ export default function App() {
       masterVolume:   s.masterVolume,
       alwaysOnTop:    s.alwaysOnTop,
       activePreset:   s.activePreset?.name ?? null,
-      savedPresets:   s.userFavorites,
+      savedPresets:   portablePresets(s.userFavorites),
+      localFilesOmitted: [...Object.values(s.audioUrls), ...s.userFavorites.flatMap(p => Object.values(p.urls))].some(isLocalAudioUrl),
       dbd_boundaries: {
         start: DBD_START,
         b2:    +DBD_B2.toFixed(2),
@@ -290,7 +295,7 @@ export default function App() {
         end:   DBD_END,
       },
       dbd_zone_width: +DBD_ZONE.toFixed(2),
-      urls:           s.audioUrls,
+      urls:           portableAudioUrls(s.audioUrls),
     };
     navigator.clipboard.writeText(JSON.stringify(cfg, null, 2)).catch(() => {
       prompt('Copy this config:', JSON.stringify(cfg, null, 2));
@@ -300,6 +305,7 @@ export default function App() {
   const importConfig = useCallback((text: string): boolean => {
     try {
       const c = JSON.parse(text);
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
       if (c.mixMode       && ['dbd','forsaken'].includes(c.mixMode))              setMixMode(c.mixMode);
       if (c.crossfadeMode && ['linear','equal-power'].includes(c.crossfadeMode)) setCrossfadeMode(c.crossfadeMode);
       if (c.forsakenSpeed && ['slow','normal','fast'].includes(c.forsakenSpeed)) setForsakenSpeed(c.forsakenSpeed);
@@ -312,22 +318,9 @@ export default function App() {
       if (typeof c.masterVolume === 'number' && Number.isFinite(c.masterVolume))
         setMasterVolume(Math.min(1, Math.max(0, c.masterVolume)));
       if (typeof c.alwaysOnTop === 'boolean') setAlwaysOnTop(c.alwaysOnTop);
-      if (c.urls && typeof c.urls === 'object') {
-        const ls: AudioLayer[] = ['l1','l2','l3','chase'];
-        if (ls.every(l => typeof c.urls[l] === 'string')) setAudioUrls(c.urls as AudioUrls);
-      }
+      if (readAudioUrls(c.urls)) setAudioUrls(portableAudioUrls(c.urls));
       if (Array.isArray(c.savedPresets)) {
-        const ls: AudioLayer[] = ['l1','l2','l3','chase'];
-        const valid = (c.savedPresets as unknown[]).filter((p): p is Preset =>
-          typeof p === 'object' && p !== null &&
-          typeof (p as Preset).id   === 'string' &&
-          typeof (p as Preset).name === 'string' &&
-          typeof (p as Preset).urls === 'object' &&
-          ls.every(l => typeof (p as Preset).urls[l] === 'string') &&
-          ((p as Preset).defaultMixMode === undefined ||
-            ['dbd', 'forsaken'].includes((p as Preset).defaultMixMode as string))
-        );
-        setUserFavorites(valid);
+        setUserFavorites(portablePresets(c.savedPresets));
       }
       return true;
     } catch { return false; }
@@ -608,6 +601,7 @@ export default function App() {
 
           {showSpectrum && <MasterVisualizer analysers={analysers} />}
         </div>
+        {playbackError && <p role="alert" className="text-sm text-red-400">{playbackError}</p>}
 
         {showCurveGraph && (
           <CurveGraph mixMode={mixMode} crossfadeMode={crossfadeMode} closeness={closeness} />
@@ -631,6 +625,9 @@ export default function App() {
               onMute={() => toggleMute(layer.key)}
               onSolo={() => toggleSolo(layer.key)}
               showWaveform={showWaveforms}
+              isPlaying={isPlaying}
+              localFile={localFiles[audioUrls[layer.key]] ?? null}
+              onFilePick={file => selectFile(layer.key, file)}
             />
           ))}
         </div>

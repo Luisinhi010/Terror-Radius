@@ -187,6 +187,7 @@ export function SettingsPanel({
             <div className="py-3 border-b border-neutral-800">
               <p className="text-[11px] text-neutral-600 mb-2">
                 Export all settings + URLs as JSON, or paste one back to restore.
+                {' '}Local audio files are session-only and are not included; reselect them after reopening.
               </p>
               <div className="flex gap-2 mb-2">
                 <button onClick={handleExport}
