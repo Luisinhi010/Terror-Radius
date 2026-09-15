@@ -11,19 +11,22 @@ import { useState, useEffect } from 'react';
 export function usePersistedState<T>(
   key: string,
   defaultValue: T,
+  sanitize?: (value: unknown) => T,
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
     try {
       const item = localStorage.getItem(key);
-      return item !== null ? (JSON.parse(item) as T) : defaultValue;
+      if (item === null) return defaultValue;
+      const parsed = JSON.parse(item);
+      return sanitize ? sanitize(parsed) : parsed as T;
     } catch {
       return defaultValue;
     }
   });
 
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
-  }, [key, state]);
+    try { localStorage.setItem(key, JSON.stringify(sanitize ? sanitize(state) : state)); } catch {}
+  }, [key, state, sanitize]);
 
   return [state, setState];
 }

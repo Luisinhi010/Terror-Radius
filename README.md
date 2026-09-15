@@ -3,6 +3,7 @@
 A dynamic layered music player for Dead by Daylight and Forsaken terror radius themes.
 Paste four audio URLs (L1 → L2 → L3 → Chase) and drag the proximity slider to hear how
 the mix changes as the killer gets closer.
+You can also choose local audio with the folder button on each layer card.
 
 > **[Live demo](https://terror-radius.vercel.app/)**
 
@@ -19,6 +20,34 @@ the mix changes as the killer gets closer.
 - **Proximity vignette**, smooth approach animation, keyboard shortcuts
 - **Tauri desktop app** — compact floating bar mode, always-on-top, Android APK build
 - Web Audio API with gapless looping and sample-accurate DBD chase sync
+
+### Local audio files
+
+- The layer cards preserve the local-file UI from the uploaded development version:
+  folder picker, filename badge, remove button, waveform and Solo/Mute controls.
+- Browsers use a file input and an in-memory object URL. Tauri desktop uses its
+  native dialog; the asset protocol starts with an empty scope and only the
+  user-selected paths are allowed by the dialog plugin. Mobile uses a file input.
+- Local files are **session-only** on both paths. The app does not upload them or
+  copy the audio into JSON. Reselect them after reopening the app.
+- Favorites can reuse local audio within the current session, including after
+  entering/exiting compact mode. Stored/exported favorites keep their names and
+  remote URLs, but local-source fields become empty. Exports flag this with
+  `localFilesOmitted`; stale local URLs from older saved configs are also cleared.
+- Replaced blobs are revoked only after no active layer or session favorite uses
+  them. File-picker cancellation/unmount also releases its temporary UI.
+- Supported formats depend on the browser/WebView decoder. The picker filter is
+  not a guarantee that every listed codec will decode on every platform.
+
+### Loading and synchronization
+
+URL typing is debounced for 350 ms (clearing a field applies immediately).
+Only changed URLs are downloaded again. Replacing audio temporarily silences the
+previous mix, waits for the latest pending loads across **all** layers, then starts
+all available buffers on one shared clock. Unchanged buffers are reused but also
+restart, so the mix cannot contain stems with mismatched playback offsets.
+Failed or cleared layers stay silent. Stop always cancels playback intent, even
+when a download, decode or `AudioContext.resume()` is still pending.
 
 ---
 
@@ -54,6 +83,20 @@ npm run tauri:build
 # Android APK
 npm run tauri:android:build
 ```
+
+## Tests
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+The regression suite uses mocked fetch/decode/Web Audio timing and DOM tests.
+It covers overlapping selections, out-of-order loading, StrictMode replay,
+Play/Stop races, cancellation, source ownership and portable config handling.
+Native file-dialog and platform codec behavior still require testing in Tauri on
+the target operating system; a web build alone does not validate native behavior.
 
 ---
 
