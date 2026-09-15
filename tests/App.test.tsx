@@ -70,3 +70,17 @@ it('retains No Virus from the base branch', () => {
   expect(screen.getByRole('button', { name: 'No Virus' })).toBeTruthy();
   expect(screen.queryByText('Nil.Incident')).toBeNull();
 });
+
+it('keeps the Presets and Settings drawers clickable in Forsaken mode', () => {
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'Forsaken' }));
+
+  fireEvent.click(screen.getByTitle('Presets'));
+  const presetsDrawer = screen.getByText('Presets', { selector: 'span' }).closest('aside');
+  expect(presetsDrawer?.className).toContain('translate-x-0');
+  fireEvent.click(presetsDrawer!.querySelector('button')!);
+
+  fireEvent.click(screen.getByTitle('Settings'));
+  const settingsDrawer = screen.getByText('Settings', { selector: 'span' }).closest('aside');
+  expect(settingsDrawer?.className).toContain('translate-x-0');
+});

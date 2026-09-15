@@ -273,11 +273,17 @@ export function useAudioEngine({
           const z    = zoneRef.current;
           const lerp = (cur: number, tgt: number) =>
             Math.abs(cur - tgt) < step ? tgt : cur + (tgt > cur ? step : -step);
-          return {
+          const next = {
             l1: lerp(prev.l1, z === 1 ? 1 : 0),
             l2: lerp(prev.l2, z === 2 ? 1 : 0),
             l3: lerp(prev.l3, z === 3 ? 1 : 0),
           };
+          // Reuse the same state object after the fade settles. Returning a new
+          // object here used to rerender the entire app 20 times per second in
+          // Forsaken mode, which could starve drawer clicks on slower WebViews.
+          return next.l1 === prev.l1 && next.l2 === prev.l2 && next.l3 === prev.l3
+            ? prev
+            : next;
         });
       });
     }, 50);
