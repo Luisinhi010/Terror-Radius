@@ -13,6 +13,8 @@ import type {
 } from '../types';
 import { dbdVolumes, getZone } from '../utils/audioMath';
 
+const AUDIO_LAYERS: AudioLayer[] = ['l1', 'l2', 'l3', 'chase'];
+
 interface UseAudioEngineProps {
   closeness:      number;
   mixMode:        MixMode;
@@ -33,6 +35,7 @@ export function useAudioEngine({
   const [isPlaying,     setIsPlaying]     = useState(false);
   const [fVols,         setFVols]         = useState<FVols>({ l1: 0, l2: 0, l3: 0 });
   const [errors,        setErrors]        = useState<AudioErrors>({});
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [loadingLayers, setLoadingLayers] = useState<Partial<Record<AudioLayer, boolean>>>({});
   const [analysers,     setAnalysers]     = useState<Record<AudioLayer, AnalyserNode | null>>({
     l1: null, l2: null, l3: null, chase: null,
@@ -47,6 +50,15 @@ export function useAudioEngine({
   const srcRefs       = useRef<Record<AudioLayer, AudioBufferSourceNode | null>>({ l1: null, l2: null, l3: null, chase: null });
   const bufRefs       = useRef<Record<AudioLayer, AudioBuffer | null>>({ l1: null, l2: null, l3: null, chase: null });
   const startTimeRefs = useRef<Record<AudioLayer, number | null>>({ l1: null, l2: null, l3: null, chase: null });
+  const loadGenerationRefs = useRef<Record<AudioLayer, number>>({ l1: 0, l2: 0, l3: 0, chase: 0 });
+  const abortRefs = useRef<Record<AudioLayer, AbortController | null>>({ l1: null, l2: null, l3: null, chase: null });
+  const previousUrlsRef = useRef<AudioUrls | null>(null);
+  const loadPromisesRef = useRef<Partial<Record<AudioLayer, Promise<boolean>>>>({});
+  const reloadGenerationRef = useRef(0);
+  const playGenerationRef = useRef(0);
+  const loadingBatchRef = useRef(false);
+  const playbackReadyRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const currentZone = getZone(closeness);
   const isChase     = currentZone === 4;
@@ -56,7 +68,6 @@ export function useAudioEngine({
   const zoneRef      = useRef(currentZone);
   const prevZoneRef  = useRef(currentZone);
 
-  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { zoneRef.current = currentZone; },    [currentZone]);
 
   // ── Cria AudioContext + GainNodes + AnalyserNodes ─────────────────────────
@@ -90,32 +101,68 @@ export function useAudioEngine({
   }, []);
 
   // ── Fetch + decode URL → AudioBuffer ──────────────────────────────────────
-  const loadBuffer = useCallback(async (layer: AudioLayer, url: string) => {
-    if (!url) return;
+  // Cada layer tem uma geração + AbortController próprios. Assim uma resposta
+  // antiga nunca sobrescreve a URL mais recente.
+  const stopSource = useCallback((layer: AudioLayer) => {
+    const source = srcRefs.current[layer];
+    if (source) {
+      try { source.stop(); } catch { /* Source may have already stopped. */ }
+      source.disconnect();
+    }
+    srcRefs.current[layer] = null;
+    startTimeRefs.current[layer] = null;
+  }, []);
+
+  const loadBuffer = useCallback(async (layer: AudioLayer, url: string): Promise<boolean> => {
+    const generation = ++loadGenerationRefs.current[layer];
+    abortRefs.current[layer]?.abort();
+    abortRefs.current[layer] = null;
+    bufRefs.current[layer] = null;
+    setErrors(prev => { const n = { ...prev }; delete n[layer]; return n; });
+
+    if (!url.trim()) {
+      stopSource(layer);
+      bufRefs.current[layer] = null;
+      setErrors(prev => { const n = { ...prev }; delete n[layer]; return n; });
+      setLoadingLayers(prev => { const n = { ...prev }; delete n[layer]; return n; });
+      return false;
+    }
+
+    const controller = new AbortController();
+    abortRefs.current[layer] = controller;
     setLoadingLayers(prev => ({ ...prev, [layer]: true }));
+
     try {
       const ctx = ensureCtx();
-      const res = await fetch(url);
+      const res = await fetch(url.trim(), { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.arrayBuffer();
       const buf = await ctx.decodeAudioData(raw);
+      if (!mountedRef.current || controller.signal.aborted || loadGenerationRefs.current[layer] !== generation) return false;
       bufRefs.current[layer] = buf;
       setErrors(prev => { const n = { ...prev }; delete n[layer]; return n; });
+      return true;
     } catch {
+      if (!mountedRef.current || controller.signal.aborted || loadGenerationRefs.current[layer] !== generation) return false;
+      stopSource(layer);
       bufRefs.current[layer] = null;
       setErrors(prev => ({ ...prev, [layer]: true }));
+      return false;
     } finally {
-      setLoadingLayers(prev => { const n = { ...prev }; delete n[layer]; return n; });
+      if (mountedRef.current && loadGenerationRefs.current[layer] === generation) {
+        abortRefs.current[layer] = null;
+        setLoadingLayers(prev => { const n = { ...prev }; delete n[layer]; return n; });
+      }
     }
-  }, [ensureCtx]);
+  }, [ensureCtx, stopSource]);
 
   // ── Posição atual do buffer em segundos ────────────────────────────────────
-  const getBufferPosition = useCallback((layer: AudioLayer): number => {
+  const getBufferPosition = useCallback((layer: AudioLayer, when?: number): number => {
     const ctx = audioCtxRef.current;
     const buf = bufRefs.current[layer];
     const t0  = startTimeRefs.current[layer];
-    if (!ctx || !buf || t0 === null) return 0;
-    return (ctx.currentTime - t0) % buf.duration;
+    if (!ctx || !buf || buf.duration <= 0 || t0 === null) return 0;
+    return Math.max(0, (when ?? ctx.currentTime) - t0) % buf.duration;
   }, []);
 
   // ── Cria + inicia um novo AudioBufferSourceNode ───────────────────────────
@@ -123,10 +170,10 @@ export function useAudioEngine({
     const ctx  = audioCtxRef.current;
     const buf  = bufRefs.current[layer];
     const gain = gainRefs.current[layer];
-    if (!ctx || !buf || !gain) return;
-    try { srcRefs.current[layer]?.stop(); } catch {}
+    if (!ctx || !buf || !gain || !playbackReadyRef.current || loadingBatchRef.current) return;
+    stopSource(layer);
     const resolvedWhen = when ?? ctx.currentTime;
-    const safeOffset   = buf.duration > 0 ? offset % buf.duration : 0;
+    const safeOffset   = buf.duration > 0 ? Math.max(0, offset) % buf.duration : 0;
     const source       = ctx.createBufferSource();
     source.buffer  = buf;
     source.loop    = true;
@@ -134,16 +181,72 @@ export function useAudioEngine({
     source.start(resolvedWhen, safeOffset);
     srcRefs.current[layer]       = source;
     startTimeRefs.current[layer] = resolvedWhen - safeOffset;
-  }, []);
+  }, [stopSource]);
+
+  const startTogether = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    if (!ctx || !isPlayingRef.current || !playbackReadyRef.current || loadingBatchRef.current) return;
+    const when = ctx.currentTime + 0.05;
+    AUDIO_LAYERS.forEach(layer => startSource(layer, 0, when));
+  }, [startSource]);
+
+  // Invalidate BOTH fetch and decode continuations on unmount. Resetting URLs
+  // also makes React StrictMode's setup → cleanup → setup replay reload safely.
+  const dispose = useCallback(() => {
+    mountedRef.current = false;
+    isPlayingRef.current = false;
+    playbackReadyRef.current = false;
+    loadingBatchRef.current = false;
+    ++playGenerationRef.current;
+    ++reloadGenerationRef.current;
+    previousUrlsRef.current = null;
+    loadPromisesRef.current = {};
+    if (fadeOutTimer.current) clearTimeout(fadeOutTimer.current);
+    fadeOutTimer.current = null;
+    AUDIO_LAYERS.forEach(layer => {
+      ++loadGenerationRefs.current[layer];
+      abortRefs.current[layer]?.abort();
+      abortRefs.current[layer] = null;
+      stopSource(layer);
+      bufRefs.current[layer] = null;
+      gainRefs.current[layer] = null;
+      analyserRefs.current[layer] = null;
+    });
+    const ctx = audioCtxRef.current;
+    audioCtxRef.current = null;
+    masterGainRef.current = null;
+    if (ctx && ctx.state !== 'closed') void ctx.close().catch(() => {});
+  }, [stopSource]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return dispose;
+  }, [dispose]);
 
   // ── Pré-decode na montagem; hot-swap quando URL muda ─────────────────────
   useEffect(() => {
-    const reload = async (layer: AudioLayer) => {
-      await loadBuffer(layer, audioUrls[layer]);
-      if (isPlayingRef.current && bufRefs.current[layer]) startSource(layer);
-    };
-    (Object.keys(audioUrls) as AudioLayer[]).forEach(layer => reload(layer));
-  }, [audioUrls, loadBuffer, startSource]);
+    const previous = previousUrlsRef.current;
+    previousUrlsRef.current = { ...audioUrls };
+    const changed = AUDIO_LAYERS
+      .filter(layer => previous === null || previous[layer] !== audioUrls[layer]);
+
+    if (changed.length === 0) return;
+    const generation = ++reloadGenerationRef.current;
+    loadingBatchRef.current = true;
+    // Silence the previous set during replacement; never mix old sources with
+    // newly decoded buffers. Unchanged buffers are reused without downloading.
+    AUDIO_LAYERS.forEach(stopSource);
+    changed.forEach(layer => {
+      loadPromisesRef.current[layer] = loadBuffer(layer, audioUrls[layer]);
+    });
+    // Include pending work for UNCHANGED layers. A second selection must not
+    // abandon other layers that are still downloading/decoding.
+    void Promise.all(Object.values(loadPromisesRef.current)).then(() => {
+      if (!mountedRef.current || generation !== reloadGenerationRef.current) return;
+      loadingBatchRef.current = false;
+      startTogether();
+    });
+  }, [audioUrls, loadBuffer, startTogether, stopSource]);
 
   // ── Entrada na zona Chase ─────────────────────────────────────────────────
   // Forsaken: restart do zero | DBD: snap ao offset de L3 para transição inaudível
@@ -154,7 +257,8 @@ export function useAudioEngine({
     if (mixMode === 'forsaken') {
       startSource('chase');
     } else {
-      startSource('chase', getBufferPosition('l3'));
+      const when = (audioCtxRef.current?.currentTime ?? 0) + 0.01;
+      startSource('chase', getBufferPosition('l3', when), when);
     }
   }, [currentZone, mixMode, startSource, getBufferPosition]);
 
@@ -169,11 +273,17 @@ export function useAudioEngine({
           const z    = zoneRef.current;
           const lerp = (cur: number, tgt: number) =>
             Math.abs(cur - tgt) < step ? tgt : cur + (tgt > cur ? step : -step);
-          return {
+          const next = {
             l1: lerp(prev.l1, z === 1 ? 1 : 0),
             l2: lerp(prev.l2, z === 2 ? 1 : 0),
             l3: lerp(prev.l3, z === 3 ? 1 : 0),
           };
+          // Reuse the same state object after the fade settles. Returning a new
+          // object here used to rerender the entire app 20 times per second in
+          // Forsaken mode, which could starve drawer clicks on slower WebViews.
+          return next.l1 === prev.l1 && next.l2 === prev.l2 && next.l3 === prev.l3
+            ? prev
+            : next;
         });
       });
     }, 50);
@@ -200,17 +310,27 @@ export function useAudioEngine({
     ramp(gainRefs.current.l2,    volL2,    'l2');
     ramp(gainRefs.current.l3,    volL3,    'l3');
     ramp(gainRefs.current.chase, volChase, 'chase');
-  }, [volL1, volL2, volL3, volChase, isMuted, masterVolume, layerOverrides]);
+  }, [volL1, volL2, volL3, volChase, isMuted, masterVolume, layerOverrides, analysers]);
 
   // ── Play / Stop ───────────────────────────────────────────────────────────
-  const togglePlay = useCallback(async () => {
-    const ctx        = ensureCtx();
-    const masterGain = masterGainRef.current;
+  const play = useCallback(async () => {
+    if (!mountedRef.current || isPlayingRef.current) return;
+    const generation = ++playGenerationRef.current;
+    isPlayingRef.current = true;
+    playbackReadyRef.current = false;
+    setIsPlaying(true);
+    setPlaybackError(null);
 
-    if (!isPlaying) {
-      if (fadeOutTimer.current) { clearTimeout(fadeOutTimer.current); fadeOutTimer.current = null; }
+    if (fadeOutTimer.current) {
+      clearTimeout(fadeOutTimer.current);
+      fadeOutTimer.current = null;
+    }
+    try {
+      const ctx = ensureCtx();
       await ctx.resume();
-
+      if (!mountedRef.current || generation !== playGenerationRef.current || !isPlayingRef.current) return;
+      playbackReadyRef.current = true;
+      const masterGain = masterGainRef.current;
       if (masterGain) {
         masterGain.gain.cancelScheduledValues(ctx.currentTime);
         if (smoothPlayStop) {
@@ -220,56 +340,59 @@ export function useAudioEngine({
           masterGain.gain.setValueAtTime(1, ctx.currentTime);
         }
       }
-      const startAt = ctx.currentTime + 0.05;
-      (Object.keys(srcRefs.current) as AudioLayer[]).forEach(layer => startSource(layer, 0, startAt));
-      setIsPlaying(true);
-
-    } else {
+      startTogether();
+    } catch {
+      if (!mountedRef.current || generation !== playGenerationRef.current) return;
+      isPlayingRef.current = false;
+      playbackReadyRef.current = false;
+      AUDIO_LAYERS.forEach(stopSource);
       setIsPlaying(false);
+      setPlaybackError('Could not start audio. Try Play again or check your audio device.');
+    }
+  }, [smoothPlayStop, ensureCtx, startTogether, stopSource]);
 
-      if (smoothPlayStop && masterGain) {
-        masterGain.gain.cancelScheduledValues(ctx.currentTime);
-        masterGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
-        fadeOutTimer.current = setTimeout(() => {
-          fadeOutTimer.current = null;
-          if (isPlayingRef.current) return;
-          (Object.keys(srcRefs.current) as AudioLayer[]).forEach(layer => {
-            try { srcRefs.current[layer]?.stop(); } catch {}
-            srcRefs.current[layer] = null;
-          });
-          if (masterGainRef.current) {
-            masterGainRef.current.gain.cancelScheduledValues(0);
-            masterGainRef.current.gain.setValueAtTime(1, 0);
-          }
-        }, 1200);
-      } else {
-        (Object.keys(srcRefs.current) as AudioLayer[]).forEach(layer => {
-          try { srcRefs.current[layer]?.stop(); } catch {}
-          srcRefs.current[layer] = null;
-        });
-        if (masterGain) {
-          masterGain.gain.cancelScheduledValues(ctx.currentTime);
-          masterGain.gain.setValueAtTime(1, ctx.currentTime);
+  const stop = useCallback(() => {
+    if (!isPlayingRef.current) return;
+    ++playGenerationRef.current;
+    isPlayingRef.current = false;
+    playbackReadyRef.current = false;
+    setIsPlaying(false);
+
+    const ctx = audioCtxRef.current;
+    const masterGain = masterGainRef.current;
+    if (!ctx) return;
+
+    if (smoothPlayStop && masterGain) {
+      masterGain.gain.cancelScheduledValues(ctx.currentTime);
+      masterGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+      fadeOutTimer.current = setTimeout(() => {
+        fadeOutTimer.current = null;
+        if (isPlayingRef.current) return;
+        (Object.keys(srcRefs.current) as AudioLayer[]).forEach(stopSource);
+        const gain = masterGainRef.current;
+        const currentCtx = audioCtxRef.current;
+        if (gain && currentCtx) {
+          gain.gain.cancelScheduledValues(currentCtx.currentTime);
+          gain.gain.setValueAtTime(1, currentCtx.currentTime);
         }
+      }, 1200);
+    } else {
+      (Object.keys(srcRefs.current) as AudioLayer[]).forEach(stopSource);
+      if (masterGain) {
+        masterGain.gain.cancelScheduledValues(ctx.currentTime);
+        masterGain.gain.setValueAtTime(1, ctx.currentTime);
       }
     }
-  }, [isPlaying, smoothPlayStop, ensureCtx, startSource]);
+  }, [smoothPlayStop, stopSource]);
 
-  // ── Cleanup ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (fadeOutTimer.current) clearTimeout(fadeOutTimer.current);
-      (Object.keys(srcRefs.current) as AudioLayer[]).forEach(layer => {
-        try { srcRefs.current[layer]?.stop(); } catch {}
-      });
-      audioCtxRef.current?.close();
-      audioCtxRef.current = null;
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const togglePlay = useCallback(() => {
+    if (isPlayingRef.current) stop();
+    else void play();
+  }, [play, stop]);
 
   return {
-    isPlaying, errors, loadingLayers, analysers,
+    isPlaying, errors, loadingLayers, analysers, playbackError,
     volL1, volL2, volL3, volChase,
-    togglePlay,
+    play, stop, togglePlay,
   };
 }

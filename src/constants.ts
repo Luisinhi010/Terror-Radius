@@ -74,7 +74,7 @@ export const BUILTIN_PRESETS: Preset[] = [
   },
   {
     id: 'nil-incident',
-    name: 'Nil.Incident',
+    name: 'No Virus',
     defaultMixMode: 'forsaken',
     urls: {
       l1:    'https://static.wikia.nocookie.net/forsaken2024/images/2/22/JX1Layer1_%281%29.ogg',

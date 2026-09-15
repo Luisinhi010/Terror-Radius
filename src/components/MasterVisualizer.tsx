@@ -48,7 +48,7 @@ export function MasterVisualizer({ analysers }: MasterVisualizerProps) {
 
       for (let i = 0; i < BAR_COUNT; i++) {
         const idx  = Math.floor((i / BAR_COUNT) * freqRange);
-        const val  = Math.min(1, mixed[idx] / 4);
+        const val  = Math.min(1, mixed[idx]);
         const barH = val * cy * 0.92;
 
         if (barH < 0.5) continue;
