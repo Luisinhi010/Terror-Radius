@@ -5,7 +5,7 @@
 // ============================================================
 
 import type { AudioLayer, CrossfadeMode, MixMode } from '../types';
-import { DBD_B2, DBD_B3, DBD_END, DBD_START, DBD_ZONE } from '../constants';
+import { DBD_B2, DBD_B3, DBD_END, DBD_ZONE } from '../constants';
 
 /**
  * Mapeia closeness (0–100) para uma das 5 zonas discretas:
@@ -36,7 +36,9 @@ export function dbdVolumes(
       : [1 - t, t];
   };
 
-  if      (c >= DBD_START && c < DBD_B2) l1 = xfade((c - DBD_START) / DBD_ZONE)[1];
+  // Fade from silence at 0 so the first 1% slider step already has gain.
+  // Keep the existing L1 peak and all later crossfade boundaries unchanged.
+  if      (c > 0        && c < DBD_B2)  l1 = xfade(c / DBD_B2)[1];
   else if (c >= DBD_B2    && c < DBD_B3) { const [o, i] = xfade((c - DBD_B2) / DBD_ZONE); l1 = o; l2 = i; }
   else if (c >= DBD_B3    && c < DBD_END){ const [o, i] = xfade((c - DBD_B3) / DBD_ZONE); l2 = o; l3 = i; }
   else if (c >= DBD_END)                  l3 = 1;
