@@ -5,9 +5,10 @@
 import type { AudioLayer, AudioUrls, LayerConfig, Preset } from './types';
 
 // ── DBD zone boundaries ────────────────────────────────────
-// Active range: [DBD_START, DBD_END) — abaixo de start é silêncio;
+// L1 fades in from 0 to DBD_B2; DBD_START is the first nonzero integer step.
+// Keep DBD_START as the anchor for the existing later transition boundaries.
 // DBD_END (99) = L3 full; 100 = chase.
-// Três zonas iguais de ≈32.67 unidades dividem [1, 99].
+// DBD_ZONE preserves the existing spacing of ≈32.67 between those boundaries.
 export const DBD_START = 1;
 export const DBD_END   = 99;
 export const DBD_ZONE  = (DBD_END - DBD_START) / 3; // ≈ 32.67
