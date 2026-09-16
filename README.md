@@ -15,7 +15,7 @@ You can also choose local audio with the folder button on each layer card.
 - **Crossfade curves** — Linear or Equal-Power
 - **Per-layer waveform visualisers** and a combined frequency spectrum
 - **Volume curve graph** — SVG chart of all 4 layer volumes across the 0–100% range
-- **Presets sidebar** — 3 built-in presets (CURTAINS_CALL, No Virus, The Singularity) + save/load favourites
+- **Presets sidebar** — 2 built-in presets (CURTAINS_CALL, No Virus) + save/load favourites
 - **Export / Import** — full JSON config including saved presets
 - **Proximity vignette**, smooth approach animation, keyboard shortcuts
 - **Tauri desktop app** — compact floating bar mode, always-on-top, Android APK build
