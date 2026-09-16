@@ -2,6 +2,7 @@
 // CONSTANTS — dados estáticos, presets, config de layers
 // ============================================================
 
+import builtinPresets from './data/builtin-presets.json';
 import type { AudioLayer, AudioUrls, LayerConfig, Preset } from './types';
 
 // ── DBD zone boundaries ────────────────────────────────────
@@ -61,38 +62,10 @@ export const LAYER_LABELS_SHORT: Record<AudioLayer, string> = {
 export const EMPTY_URLS: AudioUrls = { l1: '', l2: '', l3: '', chase: '' };
 
 // ── Presets built-in ──────────────────────────────────────
-export const BUILTIN_PRESETS: Preset[] = [
-  {
-    id: 'curtains-call',
-    name: 'CURTAINS_CALL',
-    defaultMixMode: 'forsaken',
-    urls: {
-      l1:    'https://static.wikia.nocookie.net/forsaken2024/images/3/39/CURTAINS_CALLLayer1.ogg',
-      l2:    'https://static.wikia.nocookie.net/forsaken2024/images/8/88/CURTAINS_CALLLayer2.ogg',
-      l3:    'https://static.wikia.nocookie.net/forsaken2024/images/8/89/CURTAINS_CALLLayer3.ogg',
-      chase: 'https://static.wikia.nocookie.net/forsaken2024/images/6/67/CURTAINS_CALLChase.ogg',
-    },
-  },
-  {
-    id: 'nil-incident',
-    name: 'No Virus',
-    defaultMixMode: 'forsaken',
-    urls: {
-      l1:    'https://static.wikia.nocookie.net/forsaken2024/images/2/22/JX1Layer1_%281%29.ogg',
-      l2:    'https://static.wikia.nocookie.net/forsaken2024/images/2/2f/JX1Layer2_%281%29.ogg',
-      l3:    'https://static.wikia.nocookie.net/forsaken2024/images/1/1b/JX1Layer3_%281%29.ogg',
-      chase: 'https://static.wikia.nocookie.net/forsaken2024/images/1/16/JX1CHASE_%281%29.ogg',
-    },
-  },
-  {
-    id: 'singularity',
-    name: 'The Singularity',
-    defaultMixMode: 'dbd',
-    urls: {
-      l1:    'https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_01.ogg',
-      l2:    'https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_02.ogg',
-      l3:    'https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_03.ogg',
-      chase: 'https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_04.ogg',
-    },
-  },
-];
+export const BUILTIN_PRESETS: Preset[] = builtinPresets.map(preset => {
+  const { defaultMixMode } = preset;
+  if (defaultMixMode !== 'dbd' && defaultMixMode !== 'forsaken') {
+    throw new Error(`Invalid defaultMixMode for built-in preset: ${preset.id}`);
+  }
+  return { ...preset, defaultMixMode };
+});
