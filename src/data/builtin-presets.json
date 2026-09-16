@@ -20,16 +20,5 @@
       "l3": "https://static.wikia.nocookie.net/forsaken2024/images/1/1b/JX1Layer3_%281%29.ogg",
       "chase": "https://static.wikia.nocookie.net/forsaken2024/images/1/16/JX1CHASE_%281%29.ogg"
     }
-  },
-  {
-    "id": "singularity",
-    "name": "The Singularity",
-    "defaultMixMode": "dbd",
-    "urls": {
-      "l1": "https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_01.ogg",
-      "l2": "https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_02.ogg",
-      "l3": "https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_03.ogg",
-      "chase": "https://raw.githubusercontent.com/Masusder/DBDSounds/main/Converted%20Files/Output_Deprecated/SFX/Music/TerrorRadius/mu_terrorradius_k32_layer_04.ogg"
-    }
   }
 ]
