@@ -34,7 +34,7 @@ audio remain separate from this catalog.
 
 Built-in Forsaken tracks are credited to their respective composers:
 [NO VIRUS / nil.incident — Lymphh](https://youtu.be/aGfwg6_UElM) and
-[CURTAINS_CALL — Vlad / Forsaken Sound Team](https://youtu.be/NOwF988s6_E).
+[CURTAINS_CALL — Vladosikos17](https://youtu.be/NOwF988s6_E).
 This is an unofficial, non-commercial fan project, not affiliated with Forsaken
 or Roblox. The Forsaken Development Team's public announcement permits credited
 use in videos and fan-made remixes; it is not presented here as confirmation of
