@@ -24,6 +24,7 @@ import {
 import { getZone } from './utils/audioMath';
 import { usePersistedState } from './hooks/usePersistedState';
 import { useAudioEngine }    from './hooks/useAudioEngine';
+import { useMediaSession }   from './hooks/useMediaSession';
 import { useLocalAudioSources } from './hooks/useLocalAudioSources';
 import { isLocalAudioUrl, portableAudioUrls, portablePresets, readAudioUrls } from './utils/localAudio';
 
@@ -106,9 +107,9 @@ export default function App() {
 
   // ── Audio engine ──────────────────────────────────────────────────────────
   const {
-    isPlaying, errors, loadingLayers, analysers, playbackError,
+    isPlaying, mediaPlaying, errors, loadingLayers, analysers, playbackError,
     volL1, volL2, volL3, volChase,
-    play, stop, togglePlay,
+    play, stopImmediately, togglePlay,
   } = useAudioEngine({
     closeness, mixMode, audioUrls, masterVolume,
     isMuted, crossfadeMode, layerOverrides,
@@ -194,28 +195,18 @@ export default function App() {
   [audioUrls, userFavorites]);
 
   // ── Media Session ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.setActionHandler('play',  () => { void play(); });
-    navigator.mediaSession.setActionHandler('pause', () => stop());
-    return () => {
-      navigator.mediaSession.setActionHandler('play',  null);
-      navigator.mediaSession.setActionHandler('pause', null);
-    };
-  }, [play, stop]);
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  }, [isPlaying]);
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title:  activePreset?.name ?? 'Custom Setup',
-      artist: 'Terror Radius System',
-    });
-  }, [activePreset]);
+  const seekFromMedia = useCallback((proximity: number) => {
+    // Native seeking must work with the screen locked, when RAF is suspended.
+    setSliderTarget(proximity);
+    setCloseness(proximity);
+  }, []);
+  useMediaSession({
+    title: activePreset?.name ?? 'Custom Setup',
+    isPlaying: mediaPlaying,
+    closeness,
+    volumes: { l1: volL1, l2: volL2, l3: volL3, chase: volChase },
+    play, stop: stopImmediately, seek: seekFromMedia,
+  });
 
   // ── Helpers: presets ──────────────────────────────────────────────────────
   const loadPreset = useCallback((p: Preset) => {
