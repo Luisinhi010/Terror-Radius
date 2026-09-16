@@ -15,11 +15,31 @@ You can also choose local audio with the folder button on each layer card.
 - **Crossfade curves** — Linear or Equal-Power
 - **Per-layer waveform visualisers** and a combined frequency spectrum
 - **Volume curve graph** — SVG chart of all 4 layer volumes across the 0–100% range
-- **Presets sidebar** — 3 built-in presets (CURTAINS_CALL, No Virus, The Singularity) + save/load favourites
+- **Presets sidebar** — 2 built-in presets (CURTAINS_CALL, No Virus) + save/load favourites
 - **Export / Import** — full JSON config including saved presets
 - **Proximity vignette**, smooth approach animation, keyboard shortcuts
 - **Tauri desktop app** — compact floating bar mode, always-on-top, Android APK build
 - Web Audio API with gapless looping and sample-accurate DBD chase sync
+
+### Built-in songs
+
+Edit [`src/data/builtin-presets.json`](src/data/builtin-presets.json) to add,
+remove or update built-in songs. Each entry has a unique, stable `id`, a `name`,
+a `defaultMixMode` (`forsaken` or `dbd`), and four audio URLs under `urls`:
+`l1`, `l2`, `l3` and `chase`. Keep existing IDs when updating a song.
+Rebuild/redeploy the app after changing the JSON; favorites and user-provided
+audio remain separate from this catalog.
+
+### Music credits
+
+Built-in Forsaken tracks are credited to their respective composers:
+[NO VIRUS / nil.incident — Lymphh](https://youtu.be/aGfwg6_UElM) and
+[CURTAINS_CALL — Vladosikos17](https://youtu.be/NOwF988s6_E).
+This is an unofficial, non-commercial fan project, not affiliated with Forsaken
+or Roblox. The Forsaken Development Team's public announcement permits credited
+use in videos and fan-made remixes; it is not presented here as confirmation of
+permission specifically for this app. Third-party music is not covered by this
+repository's MIT license. Users should only supply audio they have permission to use.
 
 ### Local audio files
 
