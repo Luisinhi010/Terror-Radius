@@ -25,7 +25,11 @@ export function usePersistedState<T>(
   });
 
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(sanitize ? sanitize(state) : state)); } catch {}
+    try {
+      localStorage.setItem(key, JSON.stringify(sanitize ? sanitize(state) : state));
+    } catch {
+      // Storage may be unavailable in private or restricted contexts.
+    }
   }, [key, state, sanitize]);
 
   return [state, setState];
