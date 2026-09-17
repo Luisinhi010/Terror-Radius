@@ -96,13 +96,10 @@ it('is a no-op when Media Session is absent', () => {
   expect(media.session.setActionHandler).not.toHaveBeenCalled();
 });
 
-it('integrates native seeking with both sliders, Smooth approach and headset restart', async () => {
+it('integrates native seeking with both UIs and headset restart', async () => {
   const requests = installAudioMocks();
-  localStorage.setItem('tr_smooth', 'true');
   localStorage.setItem('tr_smooth_play', 'true');
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-  // Background pages do not run animation frames. Native seeking must still work.
-  vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
   render(<App />, { reactStrictMode: true });
   fireEvent.click(screen.getByRole('button', { name: 'No Virus' }));
   fireEvent.click(screen.getByRole('button', { name: 'Dead by Daylight' }));

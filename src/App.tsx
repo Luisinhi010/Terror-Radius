@@ -8,7 +8,7 @@
 
 import {
   useState, useEffect, useMemo, useCallback,
-  useRef, startTransition,
+  useRef,
 } from 'react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import {
@@ -36,8 +36,8 @@ import { SettingsPanel }    from './components/SettingsPanel';
 import { CompactView }      from './components/CompactView';
 
 export default function App() {
-  const [closeness,    setCloseness]    = useState(0);
   const [sliderTarget, setSliderTarget] = useState(0);
+  const closeness = sliderTarget;
   const [isMuted,      setIsMuted]      = useState(false);
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -55,7 +55,6 @@ export default function App() {
   const [vignetteEnabled, setVignetteEnabled]  = usePersistedState<boolean>('tr_vignette',     true);
   const [alwaysOnTop,     setAlwaysOnTop]      = usePersistedState<boolean>('tr_aot',          false);
   const [showCurveGraph,  setShowCurveGraph]   = usePersistedState<boolean>('tr_curve',        true);
-  const [smoothApproach,  setSmoothApproach]   = usePersistedState<boolean>('tr_smooth',       false);
   const [smoothPlayStop,  setSmoothPlayStop]   = usePersistedState<boolean>('tr_smooth_play',  true);
   const [showWaveforms,   setShowWaveforms]    = usePersistedState<boolean>('tr_waveforms',    true);
   const [showSpectrum,    setShowSpectrum]     = usePersistedState<boolean>('tr_spectrum',     true);
@@ -129,7 +128,8 @@ export default function App() {
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
       if (e.code === 'KeyM' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        compactMode ? exitCompact() : enterCompact();
+        if (compactMode) exitCompact();
+        else enterCompact();
         return;
       }
       const step = e.shiftKey ? 5 : 1;
@@ -139,29 +139,6 @@ export default function App() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [togglePlay, compactMode, enterCompact, exitCompact]);
-
-  // ── Smooth approach ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (smoothApproach) return;
-    setCloseness(sliderTarget);
-  }, [sliderTarget, smoothApproach]);
-
-  useEffect(() => {
-    if (!smoothApproach) return;
-    let rafId = 0;
-    const step = () => {
-      rafId = requestAnimationFrame(step);
-      startTransition(() => {
-        setCloseness(prev => {
-          const diff = sliderTarget - prev;
-          if (Math.abs(diff) < 0.25) return sliderTarget;
-          return prev + diff * 0.12;
-        });
-      });
-    };
-    step();
-    return () => cancelAnimationFrame(rafId);
-  }, [sliderTarget, smoothApproach]);
 
   // ── Screen Wake Lock (Android / mobile) ───────────────────────────────────
   useEffect(() => {
@@ -175,7 +152,9 @@ export default function App() {
         const wl = await (navigator as unknown as { wakeLock: WL }).wakeLock.request('screen');
         if (cancelled) { wl.release(); return; }
         sentinel = wl;
-      } catch {}
+      } catch {
+        // Wake Lock is optional and can be denied by the browser or OS.
+      }
     };
     const onVisibility = () => { if (isPlaying) acquire(); };
     if (isPlaying) acquire();
@@ -196,9 +175,7 @@ export default function App() {
 
   // ── Media Session ─────────────────────────────────────────────────────────
   const seekFromMedia = useCallback((proximity: number) => {
-    // Native seeking must work with the screen locked, when RAF is suspended.
     setSliderTarget(proximity);
-    setCloseness(proximity);
   }, []);
   useMediaSession({
     title: activePreset?.name ?? 'Custom Setup',
@@ -249,13 +226,13 @@ export default function App() {
   // Antes: lia localStorage diretamente como workaround.
   // Agora: ref sempre sincronizado com o estado atual via useEffect.
   const exportStateRef = useRef({
-    mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop, smoothApproach,
+    mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop,
     vignetteEnabled, showWaveforms, showSpectrum, showCurveGraph,
     audioUrls, activePreset, userFavorites, masterVolume, alwaysOnTop,
   });
   useEffect(() => {
     exportStateRef.current = {
-      mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop, smoothApproach,
+      mixMode, crossfadeMode, forsakenSpeed, smoothPlayStop,
       vignetteEnabled, showWaveforms, showSpectrum, showCurveGraph,
       audioUrls, activePreset, userFavorites, masterVolume, alwaysOnTop,
     };
@@ -269,7 +246,6 @@ export default function App() {
       crossfadeMode:  s.crossfadeMode,
       forsakenSpeed:  s.forsakenSpeed,
       smoothPlayStop: s.smoothPlayStop,
-      smoothApproach: s.smoothApproach,
       vignetteEnabled: s.vignetteEnabled,
       showWaveforms:  s.showWaveforms,
       showSpectrum:   s.showSpectrum,
@@ -301,7 +277,6 @@ export default function App() {
       if (c.crossfadeMode && ['linear','equal-power'].includes(c.crossfadeMode)) setCrossfadeMode(c.crossfadeMode);
       if (c.forsakenSpeed && ['slow','normal','fast'].includes(c.forsakenSpeed)) setForsakenSpeed(c.forsakenSpeed);
       if (typeof c.smoothPlayStop  === 'boolean') setSmoothPlayStop(c.smoothPlayStop);
-      if (typeof c.smoothApproach  === 'boolean') setSmoothApproach(c.smoothApproach);
       if (typeof c.vignetteEnabled === 'boolean') setVignetteEnabled(c.vignetteEnabled);
       if (typeof c.showWaveforms   === 'boolean') setShowWaveforms(c.showWaveforms);
       if (typeof c.showSpectrum    === 'boolean') setShowSpectrum(c.showSpectrum);
@@ -317,7 +292,7 @@ export default function App() {
     } catch { return false; }
   }, [
     setMixMode, setCrossfadeMode, setForsakenSpeed,
-    setSmoothPlayStop, setSmoothApproach,
+    setSmoothPlayStop,
     setVignetteEnabled, setShowWaveforms, setShowSpectrum, setShowCurveGraph,
     setMasterVolume, setAlwaysOnTop, setAudioUrls, setUserFavorites,
   ]);
@@ -411,7 +386,6 @@ export default function App() {
       <SettingsPanel
         isOpen={settingsOpen}   onClose={() => setSettingsOpen(false)}
         smoothPlayStop={smoothPlayStop}   onToggleSmoothPlay={() => setSmoothPlayStop(v => !v)}
-        smoothApproach={smoothApproach}   onToggleSmoothApproach={() => setSmoothApproach(v => !v)}
         forsakenSpeed={forsakenSpeed}     onSetForsakenSpeed={setForsakenSpeed}
         vignetteEnabled={vignetteEnabled} onToggleVignette={() => setVignetteEnabled(v => !v)}
         showWaveforms={showWaveforms}     onToggleWaveforms={() => setShowWaveforms(v => !v)}
@@ -549,9 +523,6 @@ export default function App() {
                     isChase ? 'text-red-500' : 'text-neutral-500'
                   }`}>
                     {zoneName}
-                    {smoothApproach && sliderTarget !== Math.round(closeness) && (
-                      <span className="text-neutral-700 ml-1">→{sliderTarget}%</span>
-                    )}
                   </div>
                 </div>
               </div>
