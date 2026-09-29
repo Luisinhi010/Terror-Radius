@@ -12,8 +12,6 @@ interface SettingsPanelProps {
   // Playback
   smoothPlayStop:         boolean;
   onToggleSmoothPlay:     () => void;
-  smoothApproach:         boolean;
-  onToggleSmoothApproach: () => void;
   forsakenSpeed:          ForsakenSpeed;
   onSetForsakenSpeed:     (s: ForsakenSpeed) => void;
   // Display
@@ -71,7 +69,6 @@ function SectionLabel({ title }: { title: string }) {
 export function SettingsPanel({
   isOpen, onClose,
   smoothPlayStop, onToggleSmoothPlay,
-  smoothApproach, onToggleSmoothApproach,
   forsakenSpeed, onSetForsakenSpeed,
   vignetteEnabled, onToggleVignette,
   showWaveforms, onToggleWaveforms,
@@ -114,11 +111,6 @@ export function SettingsPanel({
               label="Smooth Play / Stop"
               hint="Fade in on play and fade out on stop instead of hard cuts"
               checked={smoothPlayStop} onToggle={onToggleSmoothPlay}
-            />
-            <ToggleRow
-              label="Smooth Approach"
-              hint="Animate proximity toward the slider target instead of jumping instantly"
-              checked={smoothApproach} onToggle={onToggleSmoothApproach}
             />
             <div className="py-3 border-b border-neutral-800">
               <p className="text-sm font-bold text-neutral-300">Forsaken Speed</p>

@@ -1,4 +1,4 @@
-# Terrorradius
+# Terror Radius
 
 A dynamic layered music player for Dead by Daylight and Forsaken terror radius themes.
 Paste four audio URLs (L1 → L2 → L3 → Chase) and drag the proximity slider to hear how
@@ -17,9 +17,37 @@ You can also choose local audio with the folder button on each layer card.
 - **Volume curve graph** — SVG chart of all 4 layer volumes across the 0–100% range
 - **Presets sidebar** — 2 built-in presets (CURTAINS_CALL, No Virus) + save/load favourites
 - **Export / Import** — full JSON config including saved presets
-- **Proximity vignette**, smooth approach animation, keyboard shortcuts
+- **Proximity vignette** and keyboard shortcuts
 - **Tauri desktop app** — compact floating bar mode, always-on-top, Android APK build
 - Web Audio API with gapless looping and sample-accurate DBD chase sync
+- **System media controls** — headset/media keys stop and restart stems; the native seek bar controls proximity
+
+### System media controls
+
+Start playback once from the page. In supported browsers, the system player shows
+the preset/favorite name (or `Custom Setup`) as the title and active layers plus
+proximity in the artist field. Pause/Stop from the system immediately stops all
+stems; Play restarts the mix together from zero, keeping the chosen proximity.
+The page's Stop button still honors the smooth Play/Stop preference.
+
+The native seek bar maps 0–100 to proximity, including Safe and Chase. Native seeks
+apply immediately, including while the page is in the background. A locally
+generated, unmuted silent WAV
+loops at normal speed to activate the media session. The reported position uses
+duration 100 and playbackRate 0.000001; this does not change the stems' speed.
+Metadata/position updates follow state changes, with no periodic correction timer.
+
+This carries over the experiment tested on the user's PC and Android in Test-Radius.
+Other browsers/WebViews may omit seeking, display seconds instead of percentages,
+or ignore the tiny position rate. Unsupported Media Session actions are skipped;
+browsers without Media Session retain the Web Audio player. Persistence in recent
+media after closing the page is controlled by the OS/browser, not guaranteed here.
+
+To check the integration on a device, test built-in and local stems, headset
+Pause → Play, native seeks at 0/50/100%, screen lock,
+and switching to another audio app. Desktop/Tauri WebViews require their own test.
+See the [Media Session guide](https://web.dev/articles/media-session) and
+[position API](https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/setPositionState).
 
 ### Built-in songs
 
@@ -148,7 +176,7 @@ The `dist/` folder is a plain static site. It works on any static host.
 - [Vite](https://vitejs.dev/)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [Tauri v2](https://tauri.app/) — desktop & Android packaging
-- Web Audio API — all audio logic (no `<audio>` elements)
+- Web Audio API — stem mixing, with a silent HTML audio carrier for Media Session
 
 ---
 

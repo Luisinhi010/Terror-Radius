@@ -12,6 +12,7 @@ import type {
   FVols, ForsakenSpeed, MixMode,
 } from '../types';
 import { dbdVolumes, getZone } from '../utils/audioMath';
+import { createMediaCarrier } from '../utils/mediaCarrier';
 
 const AUDIO_LAYERS: AudioLayer[] = ['l1', 'l2', 'l3', 'chase'];
 
@@ -59,6 +60,8 @@ export function useAudioEngine({
   const loadingBatchRef = useRef(false);
   const playbackReadyRef = useRef(false);
   const mountedRef = useRef(true);
+  const mediaCarrierRef = useRef<ReturnType<typeof createMediaCarrier> | null>(null);
+  const [mediaPlaying, setMediaPlaying] = useState(false);
 
   const currentZone = getZone(closeness);
   const isChase     = currentZone === 4;
@@ -197,6 +200,8 @@ export function useAudioEngine({
     isPlayingRef.current = false;
     playbackReadyRef.current = false;
     loadingBatchRef.current = false;
+    mediaCarrierRef.current?.dispose();
+    mediaCarrierRef.current = null;
     ++playGenerationRef.current;
     ++reloadGenerationRef.current;
     previousUrlsRef.current = null;
@@ -313,56 +318,22 @@ export function useAudioEngine({
   }, [volL1, volL2, volL3, volChase, isMuted, masterVolume, layerOverrides, analysers]);
 
   // ── Play / Stop ───────────────────────────────────────────────────────────
-  const play = useCallback(async () => {
-    if (!mountedRef.current || isPlayingRef.current) return;
-    const generation = ++playGenerationRef.current;
-    isPlayingRef.current = true;
-    playbackReadyRef.current = false;
-    setIsPlaying(true);
-    setPlaybackError(null);
-
-    if (fadeOutTimer.current) {
-      clearTimeout(fadeOutTimer.current);
-      fadeOutTimer.current = null;
-    }
-    try {
-      const ctx = ensureCtx();
-      await ctx.resume();
-      if (!mountedRef.current || generation !== playGenerationRef.current || !isPlayingRef.current) return;
-      playbackReadyRef.current = true;
-      const masterGain = masterGainRef.current;
-      if (masterGain) {
-        masterGain.gain.cancelScheduledValues(ctx.currentTime);
-        if (smoothPlayStop) {
-          masterGain.gain.setValueAtTime(0, ctx.currentTime);
-          masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.5);
-        } else {
-          masterGain.gain.setValueAtTime(1, ctx.currentTime);
-        }
-      }
-      startTogether();
-    } catch {
-      if (!mountedRef.current || generation !== playGenerationRef.current) return;
-      isPlayingRef.current = false;
-      playbackReadyRef.current = false;
-      AUDIO_LAYERS.forEach(stopSource);
-      setIsPlaying(false);
-      setPlaybackError('Could not start audio. Try Play again or check your audio device.');
-    }
-  }, [smoothPlayStop, ensureCtx, startTogether, stopSource]);
-
-  const stop = useCallback(() => {
-    if (!isPlayingRef.current) return;
+  const stop = useCallback((immediate = false) => {
+    if (!isPlayingRef.current && !immediate) return;
     ++playGenerationRef.current;
     isPlayingRef.current = false;
     playbackReadyRef.current = false;
     setIsPlaying(false);
+    setMediaPlaying(false);
+    mediaCarrierRef.current?.stop();
+    if (fadeOutTimer.current) clearTimeout(fadeOutTimer.current);
+    fadeOutTimer.current = null;
 
     const ctx = audioCtxRef.current;
     const masterGain = masterGainRef.current;
     if (!ctx) return;
 
-    if (smoothPlayStop && masterGain) {
+    if (!immediate && smoothPlayStop && masterGain) {
       masterGain.gain.cancelScheduledValues(ctx.currentTime);
       masterGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
       fadeOutTimer.current = setTimeout(() => {
@@ -385,14 +356,69 @@ export function useAudioEngine({
     }
   }, [smoothPlayStop, stopSource]);
 
+  const stopImmediately = useCallback(() => stop(true), [stop]);
+
+  const play = useCallback(async () => {
+    if (!mountedRef.current || isPlayingRef.current) return;
+    const generation = ++playGenerationRef.current;
+    isPlayingRef.current = true;
+    playbackReadyRef.current = false;
+    setIsPlaying(true);
+    setPlaybackError(null);
+
+    if (fadeOutTimer.current) clearTimeout(fadeOutTimer.current);
+    fadeOutTimer.current = null;
+    // A new Play cancels old fading sources even if resume/play is still pending.
+    AUDIO_LAYERS.forEach(stopSource);
+    try {
+      const ctx = ensureCtx();
+      if (navigator.mediaSession && !mediaCarrierRef.current) {
+        mediaCarrierRef.current = createMediaCarrier(
+          () => { if (mountedRef.current && isPlayingRef.current) stop(true); },
+          () => {
+            if (!mountedRef.current || !isPlayingRef.current) return;
+            stop(true);
+            setPlaybackError('System audio stopped unexpectedly. Try Play again.');
+          },
+        );
+      }
+      // Invoke both before awaiting so HTML audio keeps the user activation.
+      await Promise.all([ctx.resume(), mediaCarrierRef.current?.play()]);
+      if (!mountedRef.current || generation !== playGenerationRef.current || !isPlayingRef.current) return;
+      playbackReadyRef.current = true;
+      setMediaPlaying(true);
+      const masterGain = masterGainRef.current;
+      if (masterGain) {
+        masterGain.gain.cancelScheduledValues(ctx.currentTime);
+        if (smoothPlayStop) {
+          masterGain.gain.setValueAtTime(0, ctx.currentTime);
+          masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.5);
+        } else {
+          masterGain.gain.setValueAtTime(1, ctx.currentTime);
+        }
+      }
+      startTogether();
+    } catch {
+      if (!mountedRef.current || generation !== playGenerationRef.current) return;
+      stop(true);
+      setPlaybackError('Could not start audio. Try Play again or check your audio device.');
+    }
+  }, [smoothPlayStop, ensureCtx, startTogether, stopSource, stop]);
+
+  useEffect(() => {
+    // Navigating away stops playback; merely hiding/locking the page does not.
+    window.addEventListener('pagehide', stopImmediately);
+    return () => window.removeEventListener('pagehide', stopImmediately);
+  }, [stopImmediately]);
+
   const togglePlay = useCallback(() => {
     if (isPlayingRef.current) stop();
     else void play();
   }, [play, stop]);
 
   return {
-    isPlaying, errors, loadingLayers, analysers, playbackError,
+    isPlaying, mediaPlaying, errors, loadingLayers, analysers, playbackError,
     volL1, volL2, volL3, volChase,
-    play, stop, togglePlay,
+    play, stop, stopImmediately, togglePlay,
   };
 }
